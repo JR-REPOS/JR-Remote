@@ -1,10 +1,11 @@
 import { useState, useCallback, useEffect } from "react";
-import { Plus, X, Terminal as TerminalIcon, Moon, Sun, Wifi, WifiOff, Play, Bot, Sparkles, Command, Settings as SettingsIcon } from "lucide-react";
+import { Plus, X, Terminal as TerminalIcon, Moon, Sun, Wifi, WifiOff, Play, Bot, Sparkles, Command, Settings as SettingsIcon, CheckCircle2 } from "lucide-react";
 import TerminalView from "./components/Terminal";
 import ChatBox from "./components/ChatBox";
 import SettingsModal from "./components/SettingsModal";
 import { getSocket, disconnectSocket } from "./lib/socket";
 import { TerminalSession } from "./types";
+import { getActiveModelInfo } from "./lib/providers";
 
 const QUICK_COMMAND_PLACEHOLDERS = [
   { label: "ls -lah", desc: "List files with details" },
@@ -26,6 +27,21 @@ export default function App() {
   const [cwdMap, setCwdMap] = useState<Record<string, string>>({});
   const [quickCmd, setQuickCmd] = useState("");
   const [showSettings, setShowSettings] = useState(false);
+  const [activeModel, setActiveModel] = useState(getActiveModelInfo());
+
+  useEffect(() => {
+    const handleModelChange = () => {
+      setActiveModel(getActiveModelInfo());
+    };
+    window.addEventListener("storage", handleModelChange);
+    window.addEventListener("9remote-model-changed", handleModelChange);
+    window.addEventListener("9remote-providers-changed", handleModelChange);
+    return () => {
+      window.removeEventListener("storage", handleModelChange);
+      window.removeEventListener("9remote-model-changed", handleModelChange);
+      window.removeEventListener("9remote-providers-changed", handleModelChange);
+    };
+  }, []);
 
   const handleOutput = useCallback((output: string) => {
     setTerminalOutput((prev) => ({ ...prev, [activeSessionId || ""]: output }));
@@ -290,16 +306,44 @@ export default function App() {
               />
             ) : (
               <div className="chat-section chat-section-placeholder">
-                <div className="chat-section-header">
+                <div
+                  className="chat-section-header selected-chat-header"
+                  onClick={() => setShowSettings(true)}
+                  title="Current Active AI Model — Click to configure AI settings"
+                >
                   <div className="chat-section-title">
                     <Sparkles size={14} color="var(--brand-500)" />
-                    AI Terminal Assistant
+                    <span>AI Terminal Assistant</span>
                   </div>
-                  <span style={{ fontSize: 11, color: "var(--text-subtle)" }}>Standing by</span>
+
+                  {/* Active AI Model Indicator */}
+                  <div className="chat-header-active-model">
+                    <div className="active-model-chip" title={`Current active model: ${activeModel.label}`}>
+                      <span className="active-model-status-dot" />
+                      <span className="active-model-badge-type">
+                        {activeModel.isCustom ? "Custom AI:" : "Active Model:"}
+                      </span>
+                      <span className="active-model-badge-name">{activeModel.label}</span>
+                      {activeModel.isCustom && activeModel.provider?.lastValidation?.ok && (
+                        <span title="Connection to custom provider verified" style={{ display: "inline-flex" }}>
+                          <CheckCircle2 size={12} className="active-model-verified-icon" />
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <div className="chat-placeholder-content">
                   <div className="chat-placeholder-icon-wrap">
                     <Bot size={24} />
+                  </div>
+                  <div
+                    className="chat-empty-active-model"
+                    id="chat-placeholder-active-model"
+                    onClick={() => setShowSettings(true)}
+                    title={`Active Model: ${activeModel.label} • Click to configure`}
+                  >
+                    <span className="chat-empty-model-indicator">▪</span>
+                    <span className="chat-empty-model-name">{activeModel.label}</span>
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-main)" }}>
                     AI Terminal Assistant Ready

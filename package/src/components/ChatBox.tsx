@@ -1,9 +1,17 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Terminal, Sparkles, ChevronDown, ChevronUp, Eye, Play, Bot, ArrowRight, CornerDownLeft, Cpu, Sliders } from "lucide-react";
+import { Send, Terminal, Sparkles, ChevronDown, ChevronUp, Eye, EyeOff, Play, Bot, ArrowRight, CornerDownLeft, Cpu, Sliders, Zap } from "lucide-react";
 import { ChatMessage, AI_MODELS, CustomAIProvider } from "../types";
 import { sendChatMessage, extractCodeBlocks } from "../lib/ai";
 import { supabase } from "../lib/supabase";
-import { getCustomProviders, getActiveCustomProviderId, setActiveCustomProviderId } from "../lib/providers";
+import {
+  getCustomProviders,
+  getActiveCustomProviderId,
+  setActiveCustomProviderId,
+  getSelectedDefaultModel,
+  setSelectedDefaultModel,
+  getIncludeTerminalContext,
+  setIncludeTerminalContext,
+} from "../lib/providers";
 
 interface ChatBoxProps {
   sessionId: string;
@@ -68,12 +76,20 @@ export default function ChatBox({ sessionId, terminalOutput, cwd, onRunCommand, 
   const [loading, setLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState("claude");
   const [showModelDropdown, setShowModelDropdown] = useState(false);
-  const [includeContext, setIncludeContext] = useState(true);
+  const [includeContext, setIncludeContext] = useState(getIncludeTerminalContext);
   const [collapsed, setCollapsed] = useState(false);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [customProviders, setCustomProviders] = useState<CustomAIProvider[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const toggleIncludeContext = useCallback(() => {
+    setIncludeContext((prev) => {
+      const next = !prev;
+      setIncludeTerminalContext(next);
+      return next;
+    });
+  }, []);
 
   const refreshProviders = useCallback(() => {
     const list = getCustomProviders();
@@ -83,15 +99,32 @@ export default function ChatBox({ sessionId, terminalOutput, cwd, onRunCommand, 
       const found = list.find((p) => p.id === activeId);
       if (found) {
         setSelectedModel(`custom:${found.id}`);
+        return;
       }
     }
+    const defaultModel = getSelectedDefaultModel();
+    setSelectedModel(defaultModel);
   }, []);
 
   useEffect(() => {
     refreshProviders();
-    const handleStorage = () => refreshProviders();
+    const handleStorage = () => {
+      refreshProviders();
+      setIncludeContext(getIncludeTerminalContext());
+    };
+    const handleContextToggle = () => {
+      setIncludeContext(getIncludeTerminalContext());
+    };
     window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
+    window.addEventListener("9remote-model-changed", handleStorage);
+    window.addEventListener("9remote-providers-changed", handleStorage);
+    window.addEventListener("9remote-context-toggle-changed", handleContextToggle);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener("9remote-model-changed", handleStorage);
+      window.removeEventListener("9remote-providers-changed", handleStorage);
+      window.removeEventListener("9remote-context-toggle-changed", handleContextToggle);
+    };
   }, [refreshProviders]);
 
   useEffect(() => {
@@ -253,6 +286,7 @@ export default function ChatBox({ sessionId, terminalOutput, cwd, onRunCommand, 
                     className={`model-option ${model.id === selectedModel ? "active" : ""}`}
                     onClick={() => {
                       setSelectedModel(model.id);
+                      setSelectedDefaultModel(model.id);
                       setActiveCustomProviderId(null);
                       setShowModelDropdown(false);
                     }}
@@ -350,6 +384,23 @@ export default function ChatBox({ sessionId, terminalOutput, cwd, onRunCommand, 
                 <div className="chat-empty-icon">
                   <Bot size={22} />
                 </div>
+                <div
+                  className="chat-empty-active-model"
+                  id="chat-empty-active-model"
+                  onClick={() => setShowModelDropdown((prev) => !prev)}
+                  title={`Active Model: ${
+                    activeCustomProvider
+                      ? `${activeCustomProvider.name} (${activeCustomProvider.modelId})`
+                      : currentModel.label
+                  } • Click to switch model`}
+                >
+                  <span className="chat-empty-model-indicator">▪</span>
+                  <span className="chat-empty-model-name">
+                    {activeCustomProvider
+                      ? `${activeCustomProvider.name} (${activeCustomProvider.modelId})`
+                      : currentModel.label}
+                  </span>
+                </div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-main)" }}>
                   AI Terminal Assistant Ready
                 </div>
@@ -409,20 +460,29 @@ export default function ChatBox({ sessionId, terminalOutput, cwd, onRunCommand, 
           <div className="chat-input-area">
             <div className="chat-context-toggle">
               <button
-                onClick={() => setIncludeContext(!includeContext)}
-                className={`context-chip ${includeContext ? "active" : ""}`}
-                style={{
-                  cursor: "pointer",
-                  border: "none",
-                  background: includeContext ? "rgba(var(--success-rgb), 0.15)" : "var(--surface-3)",
-                  color: includeContext ? "var(--success)" : "var(--text-subtle)",
-                }}
+                type="button"
+                id="toggle-terminal-context-btn"
+                onClick={toggleIncludeContext}
+                className={`context-chip ${includeContext ? "active" : "excluded"}`}
+                title={
+                  includeContext
+                    ? "Terminal context included: AI receives the last terminal output. Click to exclude and save tokens."
+                    : "Terminal context excluded: AI prompt only receives your message, saving API tokens. Click to include."
+                }
               >
-                <Eye size={11} />
-                {includeContext ? "Terminal context on" : "Context off"}
+                {includeContext ? <Eye size={12} /> : <EyeOff size={12} />}
+                <span className="context-chip-label">
+                  {includeContext ? "Terminal context on" : "Terminal context off"}
+                </span>
+                <span className="context-chip-tag">
+                  {includeContext ? "Sends output" : "Saves tokens"}
+                </span>
               </button>
               {cwd && (
-                <span style={{ fontSize: 10, color: "var(--text-subtle)", fontFamily: "'JetBrains Mono', monospace" }}>
+                <span
+                  className="chat-context-cwd"
+                  title={`Current working directory: ${cwd}`}
+                >
                   {cwd}
                 </span>
               )}

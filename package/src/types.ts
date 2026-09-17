@@ -32,6 +32,13 @@ export interface CustomAIProvider {
   modelId: string;
   createdAt?: string;
   updatedAt?: string;
+  lastValidation?: {
+    ok: boolean;
+    timestamp?: number;
+    latency?: number;
+    message?: string;
+    error?: string;
+  };
 }
 
 export const AI_MODELS: AIModel[] = [

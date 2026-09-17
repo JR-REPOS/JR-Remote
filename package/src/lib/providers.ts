@@ -1,7 +1,9 @@
-import { CustomAIProvider } from "../types";
+import { CustomAIProvider, AI_MODELS } from "../types";
 
 const STORAGE_KEY = "9remote-custom-ai-providers";
 const ACTIVE_PROVIDER_KEY = "9remote-active-provider-id";
+const SELECTED_DEFAULT_MODEL_KEY = "9remote-selected-model";
+const INCLUDE_TERMINAL_CONTEXT_KEY = "9remote-include-terminal-context";
 
 export interface ProviderPreset {
   name: string;
@@ -128,9 +130,105 @@ export function setActiveCustomProviderId(id: string | null): void {
     } else {
       localStorage.removeItem(ACTIVE_PROVIDER_KEY);
     }
+    window.dispatchEvent(new Event("9remote-model-changed"));
   } catch (err) {
     console.error("Failed to set active provider ID", err);
   }
+}
+
+export function updateProviderValidation(
+  id: string,
+  validation: { ok: boolean; timestamp?: number; latency?: number; message?: string; error?: string }
+): CustomAIProvider[] {
+  try {
+    const list = getCustomProviders();
+    const index = list.findIndex((p) => p.id === id);
+    if (index >= 0) {
+      list[index] = {
+        ...list[index],
+        lastValidation: {
+          ...validation,
+          timestamp: validation.timestamp || Date.now(),
+        },
+        updatedAt: new Date().toISOString(),
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+      window.dispatchEvent(new Event("9remote-providers-changed"));
+      window.dispatchEvent(new Event("9remote-model-changed"));
+    }
+    return list;
+  } catch (err) {
+    console.error("Failed to update provider validation", err);
+    return getCustomProviders();
+  }
+}
+
+export function getSelectedDefaultModel(): string {
+  try {
+    return localStorage.getItem(SELECTED_DEFAULT_MODEL_KEY) || "claude";
+  } catch {
+    return "claude";
+  }
+}
+
+export function setSelectedDefaultModel(modelId: string): void {
+  try {
+    localStorage.setItem(SELECTED_DEFAULT_MODEL_KEY, modelId);
+    window.dispatchEvent(new Event("9remote-model-changed"));
+  } catch (err) {
+    console.error("Failed to set selected default model", err);
+  }
+}
+
+export function getIncludeTerminalContext(): boolean {
+  try {
+    const item = localStorage.getItem(INCLUDE_TERMINAL_CONTEXT_KEY);
+    if (item === null) return true; // Default to true (include context)
+    return item === "true";
+  } catch {
+    return true;
+  }
+}
+
+export function setIncludeTerminalContext(enabled: boolean): void {
+  try {
+    localStorage.setItem(INCLUDE_TERMINAL_CONTEXT_KEY, String(enabled));
+    window.dispatchEvent(new Event("9remote-context-toggle-changed"));
+  } catch (err) {
+    console.error("Failed to set terminal context preference", err);
+  }
+}
+
+export function getActiveModelInfo(): {
+  id: string;
+  label: string;
+  modelIdentifier: string;
+  isCustom: boolean;
+  provider?: CustomAIProvider;
+} {
+  const customList = getCustomProviders();
+  const activeCustomId = getActiveCustomProviderId();
+  if (activeCustomId) {
+    const found = customList.find((p) => p.id === activeCustomId);
+    if (found) {
+      return {
+        id: `custom:${found.id}`,
+        label: `${found.name} (${found.modelId})`,
+        modelIdentifier: found.modelId,
+        isCustom: true,
+        provider: found,
+      };
+    }
+  }
+
+  const defaultId = getSelectedDefaultModel();
+  const defaultModel = AI_MODELS.find((m) => m.id === defaultId) || AI_MODELS[0];
+  return {
+    id: defaultModel.id,
+    label: defaultModel.label,
+    modelIdentifier: defaultModel.id,
+    isCustom: false,
+  };
 }
 
 export async function testProviderConnection(provider: {

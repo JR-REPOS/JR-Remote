@@ -583,27 +583,95 @@ input, textarea {
 .chat-context-toggle {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   margin-bottom: 8px;
   font-size: 11px;
   color: var(--text-muted);
 }
 
 .context-chip {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border-radius: 12px;
-  background: var(--brand-tint);
-  color: var(--brand-500);
-  font-size: 10px;
-  font-weight: 600;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-subtle);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+.context-chip:hover {
+  background: var(--surface-3);
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
 }
 
 .context-chip.active {
-  background: rgba(var(--success-rgb), 0.15);
-  color: var(--success);
+  background: rgba(34, 197, 94, 0.12);
+  color: #16a34a;
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+[data-theme="dark"] .context-chip.active {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.35);
+}
+
+.context-chip.excluded {
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+.context-chip.excluded:hover {
+  color: var(--text-main);
+  border-color: var(--brand-500);
+}
+
+.context-chip-label {
+  font-weight: 600;
+  line-height: 1;
+}
+
+.context-chip-tag {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  line-height: 1.2;
+}
+
+.context-chip.active .context-chip-tag {
+  background: rgba(34, 197, 94, 0.2);
+  color: #15803d;
+}
+
+[data-theme="dark"] .context-chip.active .context-chip-tag {
+  background: rgba(34, 197, 94, 0.25);
+  color: #86efac;
+}
+
+.context-chip.excluded .context-chip-tag {
+  background: var(--surface-3);
+  color: var(--text-subtle);
+}
+
+.chat-context-cwd {
+  font-size: 10px;
+  color: var(--text-subtle);
+  font-family: 'JetBrains Mono', monospace;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-input-wrapper {
@@ -687,15 +755,21 @@ input, textarea {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 14px;
+  gap: 12px;
+  padding: 10px 16px;
   cursor: pointer;
   user-select: none;
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-  transition: background 0.15s;
+  transition: all 0.15s ease;
 }
 .chat-section-header:hover {
   background: var(--surface-2);
+}
+
+.selected-chat-header {
+  background: var(--surface);
 }
 
 .chat-section-title {
@@ -704,6 +778,106 @@ input, textarea {
   gap: 8px;
   font-size: 13px;
   font-weight: 600;
+  color: var(--text-main);
+  min-width: 0;
+}
+
+.chat-header-active-model {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.active-model-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-main);
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.active-model-chip:hover {
+  background: var(--surface-3);
+  border-color: var(--brand-500);
+}
+
+.active-model-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25);
+  flex-shrink: 0;
+}
+
+.active-model-badge-type {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  color: var(--text-subtle);
+}
+
+.active-model-badge-name {
+  font-weight: 600;
+  color: var(--text-main);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.active-model-verified-icon {
+  color: #22c55e;
+  flex-shrink: 0;
+}
+
+/* Active model badge displayed above AI Terminal Assistant Ready */
+.chat-empty-active-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  max-width: 90%;
+  margin-top: -2px;
+  margin-bottom: -2px;
+}
+
+.chat-empty-active-model:hover {
+  background: var(--surface-3);
+  border-color: var(--brand-500);
+}
+
+.chat-empty-model-indicator {
+  color: #22c55e;
+  font-size: 11px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
+
+.chat-empty-model-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.01em;
 }
 
 .chat-section-body {
@@ -1685,6 +1859,56 @@ input, textarea {
   background: var(--surface-3);
   color: var(--text-muted);
   border: 1px solid var(--border);
+}
+
+/* Visual Status Indicator (Success/Error icon) for saved providers */
+.provider-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  transition: all 0.15s ease;
+}
+
+.provider-status-badge.success {
+  background: rgba(34, 197, 94, 0.12);
+  color: #16a34a;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+[data-theme="dark"] .provider-status-badge.success {
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(74, 222, 128, 0.3);
+}
+
+.provider-status-badge.error {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+[data-theme="dark"] .provider-status-badge.error {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(248, 113, 113, 0.3);
+}
+
+.provider-status-badge.untested {
+  background: var(--surface-3);
+  color: var(--text-subtle);
+  border: 1px solid var(--border);
+}
+
+.provider-status-badge .badge-ms {
+  font-size: 9px;
+  font-family: 'JetBrains Mono', monospace;
+  opacity: 0.8;
+  padding-left: 1px;
 }
 
 .active-badge {

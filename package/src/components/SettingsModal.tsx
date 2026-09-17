@@ -17,6 +17,7 @@ import {
   EyeOff,
   Radio,
   ExternalLink,
+  HelpCircle,
 } from "lucide-react";
 import { CustomAIProvider } from "../types";
 import {
@@ -26,6 +27,7 @@ import {
   getActiveCustomProviderId,
   setActiveCustomProviderId,
   testProviderConnection,
+  updateProviderValidation,
   PROVIDER_PRESETS,
   ProviderPreset,
 } from "../lib/providers";
@@ -188,6 +190,9 @@ export default function SettingsModal({
       ...prev,
       [provider.id]: result,
     }));
+    const updated = updateProviderValidation(provider.id, result);
+    setProviders(updated);
+    onProvidersChanged?.();
   };
 
   const handleSave = (e?: React.FormEvent) => {
@@ -214,12 +219,16 @@ export default function SettingsModal({
       return;
     }
 
+    const existingProvider = editingId ? providers.find((p) => p.id === editingId) : undefined;
     const provider: CustomAIProvider = {
       id: editingId || `provider-${Date.now()}`,
       name: providerName.trim(),
       baseUrl: baseUrl.trim(),
       apiKey: apiKey.trim(),
       modelId: modelId.trim(),
+      lastValidation: validationResult
+        ? { ...validationResult, timestamp: Date.now() }
+        : existingProvider?.lastValidation,
     };
 
     const updated = saveCustomProvider(provider);
@@ -529,6 +538,45 @@ export default function SettingsModal({
                             <span className="radio-dot" />
                             <span className="provider-name">{p.name}</span>
                           </button>
+
+                          {/* Visual status indicator (Success/Error icon) to indicate last validation result */}
+                          {(() => {
+                            const val = savedValidationResults[p.id] || p.lastValidation;
+                            if (!val) {
+                              return (
+                                <span
+                                  className="provider-status-badge untested"
+                                  title="Not validated yet. Click 'Validate' to test connection."
+                                >
+                                  <HelpCircle size={12} />
+                                  <span>Untested</span>
+                                </span>
+                              );
+                            }
+                            return val.ok ? (
+                              <span
+                                className="provider-status-badge success"
+                                title={`Connection verified successfully${
+                                  val.latency !== undefined ? ` (${val.latency}ms)` : ""
+                                }`}
+                              >
+                                <CheckCircle2 size={13} />
+                                <span>Verified</span>
+                                {val.latency !== undefined && (
+                                  <span className="badge-ms">{val.latency}ms</span>
+                                )}
+                              </span>
+                            ) : (
+                              <span
+                                className="provider-status-badge error"
+                                title={`Validation failed: ${val.error || "Connection error"}`}
+                              >
+                                <AlertCircle size={13} />
+                                <span>Failed</span>
+                              </span>
+                            );
+                          })()}
+
                           <span className="provider-model-badge">{p.modelId}</span>
                           {isActive && <span className="active-badge">Active</span>}
                         </div>
