@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Terminal, Sparkles, ChevronDown, ChevronUp, Eye, Play, Bot } from "lucide-react";
+import { Send, Terminal, Sparkles, ChevronDown, ChevronUp, Eye, Play, Bot, ArrowRight, CornerDownLeft } from "lucide-react";
 import { ChatMessage, AI_MODELS } from "../types";
 import { sendChatMessage, extractCodeBlocks } from "../lib/ai";
 import { supabase } from "../lib/supabase";
@@ -11,6 +11,55 @@ interface ChatBoxProps {
   onRunCommand: (command: string) => void;
 }
 
+const PLACEHOLDER_CYCLE = [
+  "Ask AI: 'Check CPU, memory & disk usage'...",
+  "Ask AI: 'Find all .log files modified today'...",
+  "Ask AI: 'Show git branch status & commit history'...",
+  "Ask AI: 'Explain the error in my terminal output'...",
+  "Ask AI: 'List active listening ports & sockets'...",
+  "Ask AI: 'Help me write a shell script to automate this'...",
+  "Ask AI: 'How do I monitor processes in real-time?'...",
+];
+
+const SUGGESTED_PLACEHOLDERS = [
+  {
+    icon: "⚡",
+    label: "System Resources",
+    description: "Uptime, memory & disk usage",
+    prompt: "Check system uptime, memory usage, and available disk space",
+  },
+  {
+    icon: "📂",
+    label: "Find Large Files",
+    description: "Inspect top 10 largest files",
+    prompt: "Find the 10 largest files in the current directory and display their sizes",
+  },
+  {
+    icon: "🌿",
+    label: "Git Status",
+    description: "Branch status & recent commits",
+    prompt: "Show git status, branch details, and the last 3 commits",
+  },
+  {
+    icon: "🌐",
+    label: "Network Ports",
+    description: "Active ports & listening services",
+    prompt: "Check which ports and network services are currently listening",
+  },
+  {
+    icon: "🔍",
+    label: "Explain Terminal",
+    description: "Diagnose terminal output & errors",
+    prompt: "Explain the current terminal output and recommend any necessary follow-up commands",
+  },
+  {
+    icon: "🧹",
+    label: "Disk Cleanup",
+    description: "Find & clean temporary caches",
+    prompt: "Show how to find and safely clean temporary cache files and logs",
+  },
+];
+
 export default function ChatBox({ sessionId, terminalOutput, cwd, onRunCommand }: ChatBoxProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -19,8 +68,17 @@ export default function ChatBox({ sessionId, terminalOutput, cwd, onRunCommand }
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [includeContext, setIncludeContext] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (input) return;
+    const interval = setInterval(() => {
+      setPlaceholderIndex((prev) => (prev + 1) % PLACEHOLDER_CYCLE.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [input]);
 
   const loadHistory = useCallback(async () => {
     const { data } = await supabase
@@ -177,14 +235,36 @@ export default function ChatBox({ sessionId, terminalOutput, cwd, onRunCommand }
             {messages.length === 0 && !loading && (
               <div className="chat-empty">
                 <div className="chat-empty-icon">
-                  <Bot size={24} />
+                  <Bot size={22} />
                 </div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-main)" }}>
-                  AI Assistant Ready
+                  AI Terminal Assistant Ready
                 </div>
-                <div style={{ fontSize: 12, lineHeight: 1.5, maxWidth: 260 }}>
-                  Ask questions about your terminal, request commands, debug errors, or get help with your code.
-                  The AI can see your terminal output and suggest commands to run.
+                <div style={{ fontSize: 12, color: "var(--text-subtle)", maxWidth: 380, textAlign: "center" }}>
+                  Ask questions about your terminal, request commands, debug errors, or pick a suggested prompt below:
+                </div>
+
+                <div className="placeholder-prompt-grid">
+                  {SUGGESTED_PLACEHOLDERS.map((item, idx) => (
+                    <button
+                      key={idx}
+                      className="placeholder-prompt-card"
+                      onClick={() => {
+                        setInput(item.prompt);
+                        if (textareaRef.current) {
+                          textareaRef.current.focus();
+                        }
+                      }}
+                      title={`Click to fill: "${item.prompt}"`}
+                    >
+                      <span className="placeholder-prompt-icon">{item.icon}</span>
+                      <div className="placeholder-prompt-text">
+                        <span className="placeholder-prompt-title">{item.label}</span>
+                        <span className="placeholder-prompt-desc">{item.description}</span>
+                      </div>
+                      <CornerDownLeft size={12} className="placeholder-prompt-arrow" />
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
@@ -241,7 +321,7 @@ export default function ChatBox({ sessionId, terminalOutput, cwd, onRunCommand }
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask AI about your terminal, request a command, debug an error..."
+                placeholder={PLACEHOLDER_CYCLE[placeholderIndex]}
                 rows={1}
                 style={{
                   height: Math.min(textareaRef.current?.scrollHeight || 32, 120),
