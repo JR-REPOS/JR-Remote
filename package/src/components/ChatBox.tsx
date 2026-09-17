@@ -358,6 +358,18 @@ function ModelIcon({ modelId }: { modelId: string }) {
     opencode: "O",
   };
   return (
-    <span style={{ fontSize: 12, fontWeight: 700 }}>{icons[modelId] || "A"}</span>
+    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+      <img
+        src={`/agents/${modelId}.svg`}
+        alt={modelId}
+        style={{ width: 16, height: 16, borderRadius: 4 }}
+        onError={(e) => {
+          (e.currentTarget as HTMLElement).style.display = "none";
+        }}
+      />
+      <span style={{ fontSize: 12, fontWeight: 700 }} className="model-fallback-char">
+        {icons[modelId] || "A"}
+      </span>
+    </span>
   );
 }

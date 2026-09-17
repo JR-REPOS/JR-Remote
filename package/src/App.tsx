@@ -47,6 +47,8 @@ export default function App() {
     };
   }, []);
 
+  const [hasInitialized, setHasInitialized] = useState(false);
+
   const createSession = useCallback(async () => {
     const socket = getSocket();
     const sessionId = `session-${Date.now()}`;
@@ -76,6 +78,13 @@ export default function App() {
       }
     });
   }, [sessions.length]);
+
+  useEffect(() => {
+    if (connected && !hasInitialized && sessions.length === 0) {
+      setHasInitialized(true);
+      createSession();
+    }
+  }, [connected, hasInitialized, sessions.length, createSession]);
 
   const closeSession = useCallback((sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation();

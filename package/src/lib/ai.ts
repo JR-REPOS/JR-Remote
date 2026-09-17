@@ -1,6 +1,8 @@
 import { ChatMessage } from "../types";
 
-const EDGE_FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
+const EDGE_FUNCTION_URL = import.meta.env.VITE_SUPABASE_URL
+  ? `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`
+  : "/api/chat";
 
 interface StreamCallbacks {
   onToken: (token: string) => void;
@@ -18,12 +20,16 @@ export async function sendChatMessage(
   const apiKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (apiKey) {
+      headers["Authorization"] = `Bearer ${apiKey}`;
+    }
+
     const response = await fetch(EDGE_FUNCTION_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers,
       body: JSON.stringify({
         message,
         model,
