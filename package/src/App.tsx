@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect } from "react";
-import { Plus, X, Terminal as TerminalIcon, Moon, Sun, Wifi, WifiOff, Play, Bot, Sparkles, Command } from "lucide-react";
+import { Plus, X, Terminal as TerminalIcon, Moon, Sun, Wifi, WifiOff, Play, Bot, Sparkles, Command, Settings as SettingsIcon } from "lucide-react";
 import TerminalView from "./components/Terminal";
 import ChatBox from "./components/ChatBox";
+import SettingsModal from "./components/SettingsModal";
 import { getSocket, disconnectSocket } from "./lib/socket";
 import { TerminalSession } from "./types";
 
@@ -24,6 +25,7 @@ export default function App() {
   const [terminalOutput, setTerminalOutput] = useState<Record<string, string>>({});
   const [cwdMap, setCwdMap] = useState<Record<string, string>>({});
   const [quickCmd, setQuickCmd] = useState("");
+  const [showSettings, setShowSettings] = useState(false);
 
   const handleOutput = useCallback((output: string) => {
     setTerminalOutput((prev) => ({ ...prev, [activeSessionId || ""]: output }));
@@ -148,6 +150,9 @@ export default function App() {
           </div>
         </div>
         <div className="app-header-right">
+          <button className="icon-btn" onClick={() => setShowSettings(true)} title="AI Provider Settings">
+            <SettingsIcon size={16} />
+          </button>
           <button className="icon-btn" onClick={toggleTheme} title="Toggle theme">
             {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
           </button>
@@ -281,6 +286,7 @@ export default function App() {
                 terminalOutput={activeOutput}
                 cwd={activeCwd}
                 onRunCommand={handleRunCommand}
+                onOpenSettings={() => setShowSettings(true)}
               />
             ) : (
               <div className="chat-section chat-section-placeholder">
@@ -299,20 +305,35 @@ export default function App() {
                     AI Terminal Assistant Ready
                   </div>
                   <div style={{ fontSize: 11, color: "var(--text-subtle)", maxWidth: 320, textAlign: "center" }}>
-                    Start a terminal session to collaborate with AI models and run suggested commands with one click.
+                    Start a terminal session to collaborate with AI models, or configure custom OpenAI/Ollama endpoints.
                   </div>
-                  <button
-                    onClick={() => createSession()}
-                    className="chat-placeholder-btn"
-                  >
-                    <Plus size={13} /> Launch Session & Chat
-                  </button>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                    <button
+                      onClick={() => createSession()}
+                      className="chat-placeholder-btn"
+                    >
+                      <Plus size={13} /> Launch Session & Chat
+                    </button>
+                    <button
+                      onClick={() => setShowSettings(true)}
+                      className="chat-placeholder-btn"
+                      style={{ background: "var(--surface-3)", color: "var(--text-main)", borderColor: "var(--border)" }}
+                    >
+                      <SettingsIcon size={13} /> AI Settings
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* Custom AI Provider Settings Modal */}
+      <SettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+      />
     </div>
   );
 }

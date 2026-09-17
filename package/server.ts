@@ -21,13 +21,183 @@ app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", port: PORT });
 });
 
+// AI Provider connection test endpoint
+app.post("/api/custom-provider/test", async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const { name, baseUrl, apiKey, modelId } = req.body || {};
+
+    if (!baseUrl || !baseUrl.trim()) {
+      return res.status(400).json({ ok: false, error: "Base URL is required" });
+    }
+    if (!modelId || !modelId.trim()) {
+      return res.status(400).json({ ok: false, error: "Model ID is required" });
+    }
+
+    let cleanBaseUrl = baseUrl.trim().replace(/\/+$/, "");
+    const chatUrl = cleanBaseUrl.endsWith("/chat/completions")
+      ? cleanBaseUrl
+      : `${cleanBaseUrl}/chat/completions`;
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (apiKey && apiKey.trim()) {
+      headers["Authorization"] = `Bearer ${apiKey.trim()}`;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    const testRes = await fetch(chatUrl, {
+      method: "POST",
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: modelId.trim(),
+        messages: [{ role: "user", content: "Ping test. Respond with: OK" }],
+        max_tokens: 15,
+        temperature: 0.1,
+        stream: false,
+      }),
+    });
+    clearTimeout(timeout);
+
+    const latency = Date.now() - startTime;
+
+    if (!testRes.ok) {
+      const errText = await testRes.text();
+      let parsedErr = errText;
+      try {
+        const json = JSON.parse(errText);
+        parsedErr = json.error?.message || json.message || errText;
+      } catch {}
+      return res.json({
+        ok: false,
+        status: testRes.status,
+        error: `HTTP ${testRes.status}: ${parsedErr}`,
+        latency,
+      });
+    }
+
+    const json = await testRes.json();
+    const sampleOutput =
+      json.choices?.[0]?.message?.content?.trim() ||
+      json.message ||
+      "Connection successful";
+
+    return res.json({
+      ok: true,
+      message: `Verified! Response: "${sampleOutput.slice(0, 60)}"`,
+      latency,
+    });
+  } catch (err: any) {
+    const latency = Date.now() - startTime;
+    const isTimeout = err.name === "AbortError";
+    return res.json({
+      ok: false,
+      error: isTimeout
+        ? "Connection timed out after 12s. Check if base URL and port are reachable."
+        : `Network error: ${err.message || String(err)}`,
+      latency,
+    });
+  }
+});
+
 // AI Chat endpoint (handles Assistant requests with terminal context)
 app.post("/api/chat", async (req, res) => {
   try {
-    const { message, model, terminal_context, history } = req.body || {};
+    const { message, model, terminal_context, history, custom_provider } = req.body || {};
 
     if (!message) {
       return res.status(400).json({ error: "Message is required" });
+    }
+
+    // 1. If user supplied a custom AI Provider (OpenAI, Ollama, Groq, OpenRouter, etc.)
+    if (custom_provider && custom_provider.baseUrl && custom_provider.modelId) {
+      try {
+        let cleanBaseUrl = custom_provider.baseUrl.trim().replace(/\/+$/, "");
+        const chatUrl = cleanBaseUrl.endsWith("/chat/completions")
+          ? cleanBaseUrl
+          : `${cleanBaseUrl}/chat/completions`;
+
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        if (custom_provider.apiKey && custom_provider.apiKey.trim()) {
+          headers["Authorization"] = `Bearer ${custom_provider.apiKey.trim()}`;
+        }
+
+        let promptContext = "";
+        if (terminal_context) {
+          promptContext = `\n\n--- Active Terminal Output (Last 3000 chars) ---\n${terminal_context.slice(-3000)}\n--- End Terminal Output ---`;
+        }
+
+        const systemPrompt = `You are an AI terminal assistant integrated into 9Remote.
+You assist developers with terminal commands, troubleshooting, shell scripts, and system administration.
+When recommending any shell command for the user to execute, ALWAYS format it cleanly in a bash code block:
+\`\`\`bash
+command here
+\`\`\`
+The user has a direct "Run" button on every bash code block that executes it in their open terminal session.
+Be clear, practical, and concise.`;
+
+        const formattedMessages: Array<{ role: string; content: string }> = [
+          { role: "system", content: systemPrompt },
+        ];
+
+        if (Array.isArray(history)) {
+          for (const h of history.slice(-6)) {
+            formattedMessages.push({
+              role: h.role === "assistant" ? "assistant" : "user",
+              content: h.content,
+            });
+          }
+        }
+
+        formattedMessages.push({
+          role: "user",
+          content: `${message}${promptContext}`,
+        });
+
+        const providerRes = await fetch(chatUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model: custom_provider.modelId.trim(),
+            messages: formattedMessages,
+            temperature: 0.7,
+          }),
+        });
+
+        if (!providerRes.ok) {
+          const errText = await providerRes.text();
+          let parsedErr = errText;
+          try {
+            const json = JSON.parse(errText);
+            parsedErr = json.error?.message || json.message || errText;
+          } catch {}
+          return res.status(providerRes.status).json({
+            error: `Custom Provider (${custom_provider.name || "AI"}) error (${providerRes.status}): ${parsedErr}`,
+          });
+        }
+
+        const providerData = await providerRes.json();
+        const reply =
+          providerData.choices?.[0]?.message?.content ||
+          providerData.message ||
+          (typeof providerData === "string" ? providerData : JSON.stringify(providerData));
+
+        return res.json({
+          response: reply,
+          model: custom_provider.name || custom_provider.modelId,
+        });
+      } catch (providerErr: any) {
+        console.error("Custom AI provider call failed:", providerErr);
+        return res.status(502).json({
+          error: `Failed to connect to custom provider: ${providerErr.message || String(providerErr)}`,
+        });
+      }
     }
 
     const geminiKey = process.env.GEMINI_API_KEY;

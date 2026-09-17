@@ -1,4 +1,4 @@
-import { ChatMessage } from "../types";
+import { ChatMessage, CustomAIProvider } from "../types";
 
 const EDGE_FUNCTION_URL = import.meta.env.VITE_SUPABASE_URL
   ? `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`
@@ -15,7 +15,8 @@ export async function sendChatMessage(
   model: string,
   terminalContext: string | null,
   history: ChatMessage[],
-  callbacks: StreamCallbacks
+  callbacks: StreamCallbacks,
+  customProvider?: CustomAIProvider | null
 ): Promise<void> {
   const apiKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
@@ -38,6 +39,14 @@ export async function sendChatMessage(
           role: m.role,
           content: m.content,
         })),
+        custom_provider: customProvider
+          ? {
+              name: customProvider.name,
+              baseUrl: customProvider.baseUrl,
+              apiKey: customProvider.apiKey,
+              modelId: customProvider.modelId,
+            }
+          : undefined,
       }),
     });
 

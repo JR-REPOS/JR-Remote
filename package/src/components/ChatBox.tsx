@@ -1,14 +1,16 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Terminal, Sparkles, ChevronDown, ChevronUp, Eye, Play, Bot, ArrowRight, CornerDownLeft } from "lucide-react";
-import { ChatMessage, AI_MODELS } from "../types";
+import { Send, Terminal, Sparkles, ChevronDown, ChevronUp, Eye, Play, Bot, ArrowRight, CornerDownLeft, Cpu, Sliders } from "lucide-react";
+import { ChatMessage, AI_MODELS, CustomAIProvider } from "../types";
 import { sendChatMessage, extractCodeBlocks } from "../lib/ai";
 import { supabase } from "../lib/supabase";
+import { getCustomProviders, getActiveCustomProviderId, setActiveCustomProviderId } from "../lib/providers";
 
 interface ChatBoxProps {
   sessionId: string;
   terminalOutput: string;
   cwd: string;
   onRunCommand: (command: string) => void;
+  onOpenSettings?: () => void;
 }
 
 const PLACEHOLDER_CYCLE = [
@@ -60,7 +62,7 @@ const SUGGESTED_PLACEHOLDERS = [
   },
 ];
 
-export default function ChatBox({ sessionId, terminalOutput, cwd, onRunCommand }: ChatBoxProps) {
+export default function ChatBox({ sessionId, terminalOutput, cwd, onRunCommand, onOpenSettings }: ChatBoxProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -69,8 +71,28 @@ export default function ChatBox({ sessionId, terminalOutput, cwd, onRunCommand }
   const [includeContext, setIncludeContext] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const [customProviders, setCustomProviders] = useState<CustomAIProvider[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const refreshProviders = useCallback(() => {
+    const list = getCustomProviders();
+    setCustomProviders(list);
+    const activeId = getActiveCustomProviderId();
+    if (activeId) {
+      const found = list.find((p) => p.id === activeId);
+      if (found) {
+        setSelectedModel(`custom:${found.id}`);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshProviders();
+    const handleStorage = () => refreshProviders();
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [refreshProviders]);
 
   useEffect(() => {
     if (input) return;
@@ -100,17 +122,33 @@ export default function ChatBox({ sessionId, terminalOutput, cwd, onRunCommand }
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
+  const activeCustomProvider = selectedModel.startsWith("custom:")
+    ? customProviders.find((p) => `custom:${p.id}` === selectedModel) || null
+    : null;
+
+  const currentModel = activeCustomProvider
+    ? {
+        id: `custom:${activeCustomProvider.id}`,
+        label: activeCustomProvider.name,
+        icon: "custom",
+        description: `${activeCustomProvider.modelId} • ${activeCustomProvider.baseUrl}`,
+      }
+    : AI_MODELS.find((m) => m.id === selectedModel) || AI_MODELS[0];
+
   const handleSend = async () => {
     const trimmed = input.trim();
     if (!trimmed || loading) return;
 
     const context = includeContext ? terminalOutput.slice(-5000) : null;
+    const modelNameToRecord = activeCustomProvider
+      ? `${activeCustomProvider.name} (${activeCustomProvider.modelId})`
+      : selectedModel;
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       session_id: sessionId,
       role: "user",
-      model: selectedModel,
+      model: modelNameToRecord,
       content: trimmed,
       terminal_context: context,
       created_at: new Date().toISOString(),
@@ -123,47 +161,54 @@ export default function ChatBox({ sessionId, terminalOutput, cwd, onRunCommand }
     await supabase.from("chat_messages").insert({
       session_id: sessionId,
       role: "user",
-      model: selectedModel,
+      model: modelNameToRecord,
       content: trimmed,
       terminal_context: context,
     });
 
-    await sendChatMessage(trimmed, selectedModel, context, messages, {
-      onToken: () => {},
-      onDone: async (fullText) => {
-        const aiMsg: ChatMessage = {
-          id: crypto.randomUUID(),
-          session_id: sessionId,
-          role: "assistant",
-          model: selectedModel,
-          content: fullText,
-          terminal_context: null,
-          created_at: new Date().toISOString(),
-        };
-        setMessages((prev) => [...prev, aiMsg]);
-        setLoading(false);
+    await sendChatMessage(
+      trimmed,
+      selectedModel,
+      context,
+      messages,
+      {
+        onToken: () => {},
+        onDone: async (fullText) => {
+          const aiMsg: ChatMessage = {
+            id: crypto.randomUUID(),
+            session_id: sessionId,
+            role: "assistant",
+            model: modelNameToRecord,
+            content: fullText,
+            terminal_context: null,
+            created_at: new Date().toISOString(),
+          };
+          setMessages((prev) => [...prev, aiMsg]);
+          setLoading(false);
 
-        await supabase.from("chat_messages").insert({
-          session_id: sessionId,
-          role: "assistant",
-          model: selectedModel,
-          content: fullText,
-        });
+          await supabase.from("chat_messages").insert({
+            session_id: sessionId,
+            role: "assistant",
+            model: modelNameToRecord,
+            content: fullText,
+          });
+        },
+        onError: (error) => {
+          const errMsg: ChatMessage = {
+            id: crypto.randomUUID(),
+            session_id: sessionId,
+            role: "assistant",
+            model: modelNameToRecord,
+            content: `Error: ${error}`,
+            terminal_context: null,
+            created_at: new Date().toISOString(),
+          };
+          setMessages((prev) => [...prev, errMsg]);
+          setLoading(false);
+        },
       },
-      onError: (error) => {
-        const errMsg: ChatMessage = {
-          id: crypto.randomUUID(),
-          session_id: sessionId,
-          role: "assistant",
-          model: selectedModel,
-          content: `Error: ${error}`,
-          terminal_context: null,
-          created_at: new Date().toISOString(),
-        };
-        setMessages((prev) => [...prev, errMsg]);
-        setLoading(false);
-      },
-    });
+      activeCustomProvider
+    );
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -181,8 +226,6 @@ export default function ChatBox({ sessionId, terminalOutput, cwd, onRunCommand }
       .eq("id", messageId);
   };
 
-  const currentModel = AI_MODELS.find((m) => m.id === selectedModel) || AI_MODELS[0];
-
   return (
     <div className="chat-section">
       <div className="chat-section-header" onClick={() => setCollapsed(!collapsed)}>
@@ -198,7 +241,7 @@ export default function ChatBox({ sessionId, terminalOutput, cwd, onRunCommand }
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
             <button className="model-selector" onClick={() => setShowModelDropdown(!showModelDropdown)}>
-              <Sparkles size={13} />
+              {activeCustomProvider ? <Cpu size={13} style={{ color: "var(--brand-500)" }} /> : <Sparkles size={13} />}
               {currentModel.label}
               <ChevronDown size={12} />
             </button>
@@ -210,6 +253,7 @@ export default function ChatBox({ sessionId, terminalOutput, cwd, onRunCommand }
                     className={`model-option ${model.id === selectedModel ? "active" : ""}`}
                     onClick={() => {
                       setSelectedModel(model.id);
+                      setActiveCustomProviderId(null);
                       setShowModelDropdown(false);
                     }}
                   >
@@ -222,6 +266,75 @@ export default function ChatBox({ sessionId, terminalOutput, cwd, onRunCommand }
                     </div>
                   </div>
                 ))}
+
+                {/* Custom AI Providers Section */}
+                {customProviders.length > 0 && (
+                  <>
+                    <div className="model-dropdown-divider" />
+                    <div className="model-dropdown-section-title">Custom AI Providers</div>
+                    {customProviders.map((cp) => {
+                      const isThisSelected = selectedModel === `custom:${cp.id}`;
+                      return (
+                        <div
+                          key={cp.id}
+                          className={`model-option ${isThisSelected ? "active" : ""}`}
+                          onClick={() => {
+                            setSelectedModel(`custom:${cp.id}`);
+                            setActiveCustomProviderId(cp.id);
+                            setShowModelDropdown(false);
+                          }}
+                        >
+                          <div className="model-option-icon" style={{ color: "var(--brand-500)" }}>
+                            <Cpu size={14} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                              <span>{cp.name}</span>
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  padding: "1px 5px",
+                                  background: "var(--surface-3)",
+                                  borderRadius: 3,
+                                  fontFamily: "monospace",
+                                }}
+                              >
+                                {cp.modelId}
+                              </span>
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 10,
+                                color: "var(--text-subtle)",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {cp.baseUrl}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+
+                {onOpenSettings && (
+                  <>
+                    <div className="model-dropdown-divider" />
+                    <button
+                      className="model-dropdown-manage-btn"
+                      onClick={() => {
+                        setShowModelDropdown(false);
+                        onOpenSettings();
+                      }}
+                    >
+                      <Sliders size={12} />
+                      <span>Configure Custom Providers...</span>
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -437,6 +550,15 @@ function ModelIcon({ modelId }: { modelId: string }) {
     codex: "O",
     opencode: "O",
   };
+
+  if (modelId.startsWith("custom:") || !icons[modelId]) {
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", color: "var(--brand-500)" }}>
+        <Cpu size={14} />
+      </span>
+    );
+  }
+
   return (
     <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
       <img
